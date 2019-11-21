@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>GethInfo</title>
+    <script type="text/javascripts" src="/javascripts/web3.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      var socket = io('http://localhost:8880');//http://35.223.204.78:8880
+
+      var web3 = new Web3();
+      web3 = new Web3(new Web3.providers.HttpProvider('http://35.223.204.78:8545')); //http://35.223.204.78:8545
+
+      var txID = null;
+      var eth = web3.eth;
+      var personal = web3.personal;
+  
+      socket.on("init", (data) => {
+        document.getElementById("accounts").innerHTML="";
+        document.getElementById("etherbase").innerHTML="";
+        document.getElementById("mined").innerHTML="";
+        document.getElementById("getbal").innerHTML="";
+        document.getElementById("geteth").innerHTML="";
+  
+        document.getElementById("accounts").innerHTML=data.accounts;
+        document.getElementById("etherbase").append("coinbase Account : " + data.coinbase);
+        document.getElementById("mined").append(data.blocknum);
+        document.getElementById("getbal").append("balance of coinbase : " + data.wei);
+        document.getElementById("geteth").append("Wei To Ether : " + data.ether);
+      });
+  
+      function interval() {
+        socket.emit("interval", null);
+        console.log("req_interval");
+      }
+      setInterval(interval, 5000);
+  
+      socket.on("update", (data) => {
+        console.log("update");
+        document.getElementById("mined").innerHTML="";
+        document.getElementById("getbal").innerHTML="";
+        document.getElementById("geteth").innerHTML="";
+  
+        document.getElementById("mined").innerHTML=data.blocknum;
+        document.getElementById("getbal").innerHTML="balance of coinbase : " + data.wei;
+        document.getElementById("geteth").innerHTML="Wei To Ether : " + data.ether;
+      });
+  
+      socket.on("tran", (hex_chunk_encode) => {
+        var account = eth.accounts[0];
+        web3.personal.unlockAccount(account, "test");
+        var txID = eth.sendTransaction({ 
+          from:account, 
+          data:hex_chunk_encode
+        });
+        console.log(txID);
+        socket.emit("txid", txID);
+            
+        var txInfo = web3.eth.getTransaction(txID);
+        var text_info = JSON.stringify(txInfo);
+        document.getElementById("before_txinfo").innerHTML=text_info;
+            
+        var filterString='latest';
+        var filter = web3.eth.filter('latest');
+  
+        filter.watch((err,res) => {
+          if(!err) {
+            console.log(`res ${res}`);
+            var block = web3.eth.getBlock(res);
+            console.log(`block ${JSON.stringify(block)}`);
+            if(block.transactions.includes(txID)) {
+              filter.stopWatching();
+              console.log(`${txID} completed`);
+              var receipt = eth.getTransactionReceipt(txID);
+              socket.emit("res_tx", receipt);
+              console.log(receipt);
+              var text_rec = JSON.stringify(receipt);
+              document.getElementById('after_txinfo').innerHTML=text_rec;
+              }
+          } else {
+            console.log(`err ${err}`);
+          }
+        });
+      });
+    </script>
+  </head>
+
+  <body>
+    <!-- 저희가 만든 geth 블록체인의 데이터를 들고 오겠습니다. -->
+    <h1>Fundigo Transaction Viewer</h1>
+    <hr>
+
+    <!-- 계정목록 -->
+    <div style="background-color:azure; word-break:break-all;">
+      <h2>Accounts</h2>
+      <p id = "accounts"></p>
+    </div>
+
+    <!-- 이더(코인)베이스 계정 -->
+    <div style="background-color:aquamarine">
+      <h2>Etherbase Account</h2>
+      <p id = "etherbase"></p>
+    </div>
+
+    <!-- 코인베이스의 이더량(wei) -->
+    <div style="background-color:bisque">
+      <h2>Balance of Coinbase Account</h2>
+      <p id = "getbal"></p>
+  <p id = "geteth"></p>
+    </div>
+
+    <!-- 현재까지 채굴 된 블록의 갯수 -->
+    <div style="background-color:aliceblue">
+      <h2>Mined block Number</h2>
+      <p id = "mined"></p>
+    </div>
+
+    <button onclick="tx()">트랜잭션</button>
+
+    <!-- before 트랜잭션 정보 -->
+    <div style="background-color:gray; word-break:break-all;">
+      <h2>Before sending Transaction Info</h2>
+      <p id = "before_txinfo"></p>
+    </div>
+
+    <!-- after 트랜잭션 정보 -->
+    <div style="background-color:gray; word-break:break-all;">
+      <h2>After sending Transaction Info</h2>
+      <p id = "after_txinfo"></p>
+    </div>
+  </body>
+</html>
